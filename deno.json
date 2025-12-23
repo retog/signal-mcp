@@ -1,0 +1,16 @@
+{
+  "name": "@retog/signal-mcp",
+  "version": "1.0.0",
+  "exports": "./src/index.ts",
+  "tasks": {
+    "start": "DENO_TLS_CA_STORE=system deno run --allow-all src/index.ts",
+    "dev": "DENO_TLS_CA_STORE=system deno run --allow-all --watch src/index.ts"
+  },
+  "imports": {
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.0.4"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.ns"],
+    "strict": true
+  }
+}
