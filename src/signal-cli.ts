@@ -107,14 +107,7 @@ export class SignalCLI {
     since?: number,
   ): Promise<MessageResult[]> {
     try {
-      const args = ["receive"];
-      
-      if (since) {
-        // signal-cli doesn't have a direct --since flag, but we can filter after receiving
-        args.push("--timeout", "1");
-      } else {
-        args.push("--timeout", "1");
-      }
+      const args = ["receive", "--timeout", "1"];
 
       const result = await this.execute(args);
       
@@ -269,6 +262,21 @@ export class SignalCLI {
   }
 
   /**
+   * Check if a string is likely a Signal group ID (base64 encoded)
+   */
+  private isGroupId(recipient: string): boolean {
+    // Signal group IDs are base64 encoded and typically longer than phone numbers
+    // They often end with '=' or '==' for padding
+    // Phone numbers start with '+' and are typically 10-15 digits
+    if (recipient.startsWith("+")) {
+      return false;
+    }
+    // Check for base64 pattern (alphanumeric + / + and optionally ending with =)
+    const base64Pattern = /^[A-Za-z0-9+/]+=*$/;
+    return base64Pattern.test(recipient) && recipient.length > 20;
+  }
+
+  /**
    * Send a message to a recipient
    */
   async sendMessage(
@@ -279,7 +287,7 @@ export class SignalCLI {
       const args = ["send", "-m", message];
       
       // Check if recipient is a group ID (base64 encoded)
-      if (recipient.includes("==") || recipient.length > 20) {
+      if (this.isGroupId(recipient)) {
         args.push("-g", recipient);
       } else {
         args.push(recipient);
@@ -307,10 +315,11 @@ export class SignalCLI {
   async searchMessages(
     query: string,
     contact?: string,
+    searchLimit: number = 500,
   ): Promise<MessageResult[]> {
     try {
-      // Receive recent messages
-      const messages = await this.receiveMessages(100);
+      // Receive recent messages with configurable limit
+      const messages = await this.receiveMessages(searchLimit);
       
       const lowerQuery = query.toLowerCase();
       
