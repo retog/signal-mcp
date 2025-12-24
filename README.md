@@ -70,46 +70,90 @@ export SIGNAL_CLI_PATH="/opt/signal-cli/bin/signal-cli"
 
 # Timeout for signal-cli commands in milliseconds (default: 30000)
 export SIGNAL_TIMEOUT="30000"
+
+# HTTP server port (default: 3000)
+export PORT="3000"
+
+# HTTP server host (default: 0.0.0.0)
+export HOST="0.0.0.0"
 ```
 
-### Claude Desktop Configuration
+## Usage
 
-Add to your Claude Desktop config file:
+### Running the HTTP Server
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Start the server:
 
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+```bash
+# Using default port 3000
+deno task start
 
-**Linux**: `~/.config/Claude/claude_desktop_config.json`
+# Or specify a custom port
+PORT=8080 SIGNAL_ACCOUNT="+1234567890" deno task start
+```
+
+The server will start on `http://0.0.0.0:3000` (or your specified port) and provide the following endpoints:
+
+- **GET /sse** - Server-Sent Events endpoint for MCP streaming communication
+- **POST /message?sessionId=<id>** - Message endpoint for client requests
+- **GET /health** - Health check endpoint
+
+### Connecting MCP Clients
+
+MCP clients should connect to the `/sse` endpoint using HTTP streaming. The server will:
+1. Establish an SSE connection on GET /sse
+2. Send an `endpoint` event with the message POST URL including session ID
+3. Accept JSON-RPC messages via POST /message with the session ID parameter
+
+### Claude Desktop Configuration (HTTP)
+
+For HTTP-based MCP connection, you'll need to run the server separately and configure Claude to connect to it.
+
+**Step 1: Start the Signal MCP server**
+
+```bash
+export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
+cd /path/to/signal-mcp
+deno task start
+```
+
+**Step 2: Configure Claude Desktop to use HTTP transport**
+
+Note: As of December 2024, Claude Desktop primarily supports stdio-based MCP servers. For HTTP/SSE transport, you may need to use a different MCP client or wait for Claude Desktop to add HTTP transport support.
+
+Alternative approach - Use stdio transport (legacy):
+
+If you prefer stdio transport for Claude Desktop compatibility, you can use an older version or contribute to adding HTTP support to Claude Desktop.
+
+For other MCP clients that support HTTP/SSE transport:
 
 ```json
 {
   "mcpServers": {
     "signal": {
-      "command": "deno",
-      "args": [
-        "run",
-        "--allow-all",
-        "/ABSOLUTE/PATH/TO/signal-mcp/src/index.ts"
-      ],
-      "env": {
-        "SIGNAL_ACCOUNT": "+YOUR_PHONE_NUMBER"
-      }
+      "url": "http://localhost:3000/sse",
+      "transport": "sse"
     }
   }
 }
 ```
 
-Replace `/ABSOLUTE/PATH/TO/signal-mcp` with the actual path to this repository.
-
 ## Usage
 
-### Running Standalone
+### Running Standalone (HTTP Server)
 
-Test the server standalone:
+Start the Signal MCP server:
 
 ```bash
-deno run --allow-all src/index.ts
+export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
+deno task start
+```
+
+The server will be accessible at `http://localhost:3000`. You can test it:
+
+```bash
+# Health check
+curl http://localhost:3000/health
 ```
 
 ### Available Tools
@@ -247,11 +291,15 @@ Send a message via Signal. **Requires individual approval in Claude for each sen
 
 ## How It Works
 
-1. **MCP Protocol**: The server implements the Model Context Protocol, allowing Claude and other MCP clients to discover and use the Signal tools.
+1. **MCP Protocol**: The server implements the Model Context Protocol, allowing MCP clients to discover and use the Signal tools.
 
 2. **signal-cli Integration**: All Signal operations are performed using signal-cli with JSON output (`--output=json`), ensuring structured, parseable responses.
 
-3. **SSE Transport**: Uses Server-Sent Events (SSE) for real-time communication (via stdio transport in MCP SDK).
+3. **HTTP Streaming Transport**: Uses HTTP with Server-Sent Events (SSE) for real-time bidirectional communication between MCP clients and the server.
+   - Clients connect to `/sse` endpoint via HTTP GET
+   - Server streams events using SSE protocol  
+   - Clients send messages via HTTP POST to `/message` endpoint
+   - Each connection gets a unique session ID for routing
 
 4. **Security**: 
    - Read operations (receive, list, search) are marked for auto-approval
@@ -281,7 +329,7 @@ signal-cli -a +YOUR_PHONE_NUMBER link -n "signal-mcp"
 The Deno process needs `--allow-all` permissions to:
 - Execute signal-cli binary
 - Read environment variables
-- Perform network operations (if using daemon mode)
+- Start HTTP server and accept network connections
 
 ### No messages received
 
@@ -300,9 +348,10 @@ deno task dev
 ## Security Considerations
 
 - **Environment Variables**: Store sensitive data (phone numbers) in environment variables, never in code
-- **Approval Required**: All message sends require explicit user approval in Claude
+- **Approval Required**: All message sends require explicit user approval in MCP clients
 - **signal-cli Security**: Follow signal-cli security best practices for account management
-- **Local Only**: This server runs locally and doesn't expose any network endpoints
+- **Network Security**: The HTTP server binds to 0.0.0.0 by default - use firewall rules or change HOST to localhost for local-only access
+- **CORS**: The server includes CORS headers for cross-origin requests - adjust as needed for production
 
 ## License
 

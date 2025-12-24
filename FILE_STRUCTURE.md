@@ -49,10 +49,12 @@ This document explains the purpose of each file in the Signal MCP Server project
 
 - **src/index.ts** - Main MCP server entry point
   - Initializes Signal CLI client
-  - Creates and configures MCP Server
+  - Creates and configures MCP Server with HTTP transport
   - Registers 5 tools with schemas
   - Handles tool execution requests
-  - Manages stdio transport
+  - Manages HTTP server with SSE transport
+  - Routes /sse (GET), /message (POST), /health (GET) endpoints
+  - Session management for multiple clients
   - Error handling and logging
 
 - **src/signal-cli.ts** - Signal CLI integration layer
@@ -87,10 +89,20 @@ This document explains the purpose of each file in the Signal MCP Server project
 
 ```
 ┌─────────────────┐
-│  Claude Desktop │
-│    (MCP Client) │
+│   MCP Client    │
+│  (HTTP/SSE)     │
 └────────┬────────┘
-         │ stdio transport
+         │ GET /sse (SSE stream)
+         │ POST /message (JSON-RPC)
+         ▼
+┌─────────────────┐
+│  HTTP Server    │
+│ (Deno std/http) │
+│  - GET /sse     │
+│  - POST /message│
+│  - GET /health  │
+└────────┬────────┘
+         │ SSEServerTransport
          ▼
 ┌─────────────────┐
 │  src/index.ts   │
@@ -121,16 +133,18 @@ This document explains the purpose of each file in the Signal MCP Server project
 
 ### Receiving Messages
 
-1. Claude calls `receive_messages` tool
-2. `src/index.ts` handles the request
-3. Calls `SignalCLI.receiveMessages()`
-4. `src/signal-cli.ts` executes: `signal-cli -a ACCOUNT --output=json receive`
-5. Parses JSON output into `MessageResult[]` using types from `src/types.ts`
-6. Returns formatted JSON to Claude
+1. MCP client sends JSON-RPC request via POST /message
+2. HTTP server routes to SSEServerTransport
+3. MCP Server receives tool call request
+4. `src/index.ts` handles the `receive_messages` tool
+5. Calls `SignalCLI.receiveMessages()`
+6. `src/signal-cli.ts` executes: `signal-cli -a ACCOUNT --output=json receive`
+7. Parses JSON output into `MessageResult[]` using types from `src/types.ts`
+8. Returns formatted JSON via SSE stream back to client
 
 ### Sending Messages
 
-1. Claude calls `send_message` tool (requires user approval)
+1. MCP client sends `send_message` tool request (requires user approval)
 2. `src/index.ts` validates parameters
 3. Calls `SignalCLI.sendMessage(recipient, message)`
 4. `src/signal-cli.ts` determines if group or individual
@@ -143,11 +157,14 @@ This document explains the purpose of each file in the Signal MCP Server project
 2. Run `deno task dev` for hot-reload development
 3. Test with `DENO_TLS_CA_STORE=system deno run --allow-all test.ts`
 4. Check types with `DENO_TLS_CA_STORE=system deno check src/index.ts`
-5. Deploy by updating Claude Desktop config
+5. Start HTTP server with `deno task start`
+6. Test endpoints with `curl http://localhost:3000/health`
+7. Connect MCP clients to `http://localhost:3000/sse`
 
 ## Dependencies
 
 - **Runtime**: Deno 2.6.3+
+- **HTTP Server**: Deno standard library (std@0.208.0/http/server.ts)
 - **MCP SDK**: @modelcontextprotocol/sdk (npm)
 - **External**: signal-cli (system binary)
 
@@ -158,4 +175,6 @@ This document explains the purpose of each file in the Signal MCP Server project
 | SIGNAL_ACCOUNT | Required | Phone number for signal-cli |
 | SIGNAL_CLI_PATH | Optional | Custom path to signal-cli binary |
 | SIGNAL_TIMEOUT | Optional | Command timeout in milliseconds |
+| PORT | Optional | HTTP server port (default: 3000) |
+| HOST | Optional | HTTP server host (default: 0.0.0.0) |
 | DENO_TLS_CA_STORE | Required | Set to "system" for SSL certificates |

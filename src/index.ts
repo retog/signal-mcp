@@ -5,15 +5,18 @@
  * 
  * An MCP server that provides tools for interacting with Signal messenger
  * via signal-cli.
+ * 
+ * This server uses HTTP with streaming transport for MCP communication.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { SignalCLI } from "./signal-cli.ts";
+import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 
 // Initialize Signal CLI
 const signalCliPath = Deno.env.get("SIGNAL_CLI_PATH") || "signal-cli";
@@ -263,15 +266,143 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
- * Start the server
+ * Start the server with HTTP streaming transport
  */
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const port = parseInt(Deno.env.get("PORT") || "3000", 10);
+  const host = Deno.env.get("HOST") || "0.0.0.0";
   
-  console.error("Signal MCP Server running on stdio");
+  console.error(`Signal MCP Server starting on http://${host}:${port}`);
   console.error(`Account: ${signalAccount}`);
   console.error(`Signal CLI path: ${signalCliPath}`);
+  console.error(`Endpoint: /sse`);
+
+  // Store active transports by session ID
+  const transports = new Map<string, SSEServerTransport>();
+
+  await serve(async (req) => {
+    const url = new URL(req.url);
+    
+    // Health check endpoint
+    if (url.pathname === "/health") {
+      return new Response(JSON.stringify({ status: "ok" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // SSE connection endpoint (GET request)
+    if (url.pathname === "/sse" && req.method === "GET") {
+      // Create response for SSE streaming
+      const body = new ReadableStream({
+        start(controller) {
+          // Create transport with a custom response wrapper
+          const responseWrapper = {
+            writeHead: (status: number, headers: Record<string, string>) => {
+              // Headers will be set on the Response object
+            },
+            write: (data: string) => {
+              controller.enqueue(new TextEncoder().encode(data));
+            },
+            end: () => {
+              controller.close();
+            },
+            on: (event: string, callback: () => void) => {
+              if (event === "close") {
+                // Handle close event
+              }
+            },
+          };
+
+          const transport = new SSEServerTransport("/message", responseWrapper as any);
+          
+          // Store transport by session ID
+          transports.set(transport.sessionId, transport);
+
+          // Connect server to transport (this also calls start())
+          server.connect(transport).catch((error) => {
+            console.error("Error connecting transport:", error);
+            controller.close();
+          });
+        },
+        cancel() {
+          // Cleanup on client disconnect
+        },
+      });
+
+      return new Response(body, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // Message endpoint (POST request)
+    if (url.pathname === "/message" && req.method === "POST") {
+      const sessionId = url.searchParams.get("sessionId");
+      
+      if (!sessionId) {
+        return new Response("Missing sessionId", { status: 400 });
+      }
+
+      const transport = transports.get(sessionId);
+      if (!transport) {
+        return new Response("Session not found", { status: 404 });
+      }
+
+      try {
+        const body = await req.json();
+        
+        // Create request wrapper for transport
+        const reqWrapper = {
+          headers: Object.fromEntries(req.headers.entries()),
+        };
+
+        // Create response wrapper
+        let statusCode = 200;
+        let responseBody = "";
+        const resWrapper = {
+          writeHead: (status: number) => {
+            statusCode = status;
+            return resWrapper;
+          },
+          end: (data?: string) => {
+            if (data) responseBody = data;
+          },
+        };
+
+        await transport.handlePostMessage(reqWrapper as any, resWrapper as any, body);
+        
+        return new Response(responseBody || "Accepted", { 
+          status: statusCode,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      } catch (error) {
+        console.error("Error handling message:", error);
+        return new Response(
+          error instanceof Error ? error.message : "Internal error",
+          { status: 500 }
+        );
+      }
+    }
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
+    return new Response("Not Found", { status: 404 });
+  }, { port, hostname: host });
 }
 
 main().catch((error) => {

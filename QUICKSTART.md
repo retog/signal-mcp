@@ -82,7 +82,7 @@ export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
 export SIGNAL_CLI_PATH="/opt/signal-cli-0.13.9/bin/signal-cli"
 ```
 
-### 6. Test the MCP Server
+### 6. Start the MCP Server
 
 ```bash
 # Clone the repository
@@ -92,54 +92,50 @@ cd signal-mcp
 # Run the test script
 DENO_TLS_CA_STORE=system deno run --allow-all test.ts
 
-# If all tests pass, try running the server
+# Start the HTTP server
+export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
 deno task start
 ```
 
-### 7. Configure Claude Desktop
-
-Edit your Claude Desktop configuration:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows:** `%APPDATA%/Claude/claude_desktop_config.json`
-
-**Linux:** `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "signal": {
-      "command": "deno",
-      "args": [
-        "run",
-        "--allow-all",
-        "/ABSOLUTE/PATH/TO/signal-mcp/src/index.ts"
-      ],
-      "env": {
-        "SIGNAL_ACCOUNT": "+YOUR_PHONE_NUMBER",
-        "DENO_TLS_CA_STORE": "system"
-      }
-    }
-  }
-}
+The server will start on `http://localhost:3000`. You should see:
+```
+Signal MCP Server starting on http://0.0.0.0:3000
+Account: +YOUR_PHONE_NUMBER
+Signal CLI path: signal-cli
+Endpoint: /sse
 ```
 
-Replace:
-- `/ABSOLUTE/PATH/TO/signal-mcp` with the actual path
-- `+YOUR_PHONE_NUMBER` with your phone number (including country code)
+Test the server:
+```bash
+curl http://localhost:3000/health
+```
 
-### 8. Restart Claude Desktop
+### 7. Connect MCP Clients
 
-After saving the configuration, completely restart Claude Desktop to load the MCP server.
+The Signal MCP server now runs as an HTTP service. MCP clients should connect to:
 
-## Verify It's Working
+- **SSE Endpoint**: `http://localhost:3000/sse`
+- **Transport**: HTTP with Server-Sent Events
 
-In Claude Desktop, you should be able to:
+**Note**: As of December 2024, Claude Desktop primarily supports stdio-based MCP servers. For HTTP/SSE transport, you may need to:
+- Use a custom MCP client that supports HTTP transport
+- Wait for Claude Desktop to add native HTTP transport support
+- Use a proxy/bridge to convert between stdio and HTTP
 
-1. Ask Claude to "receive my Signal messages"
-2. Ask Claude to "list my Signal chats"
-3. Ask Claude to "search for messages containing 'meeting'"
+## Testing the Server
+
+Once the server is running, test it with:
+
+```bash
+# Health check
+curl http://localhost:3000/health
+
+# Should return: {"status":"ok"}
+```
+
+### Using with MCP Clients
+
+Configure your MCP client to connect to `http://localhost:3000/sse` using SSE transport.
 
 ## Troubleshooting
 
