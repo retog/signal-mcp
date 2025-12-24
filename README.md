@@ -4,13 +4,13 @@ An unofficial [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
 
 ## Features
 
-- **Read Operations** (auto-approved in Claude):
+- **Read Operations**:
   - 📨 Receive and read Signal messages
   - 💬 List all conversations (contacts and groups)
   - 🔍 Search message history
   - 📎 Download media attachments
 
-- **Write Operations** (require individual approval):
+- **Write Operations**:
   - ✉️ Send Signal messages (each send requires user approval in Claude)
 
 ## Prerequisites
