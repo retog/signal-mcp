@@ -10,11 +10,13 @@ import type {
   SignalGroup,
   SendMessageResult,
 } from "./types.ts";
+import { MessageCache, type RecentChat } from "./message-cache.ts";
 
 export class SignalCLI {
   private signalCliPath: string;
   private account: string;
   private timeout: number;
+  private messageCache: MessageCache;
 
   constructor(
     signalCliPath: string = "signal-cli",
@@ -24,6 +26,7 @@ export class SignalCLI {
     this.signalCliPath = signalCliPath;
     this.account = account || Deno.env.get("SIGNAL_ACCOUNT") || "";
     this.timeout = timeout;
+    this.messageCache = new MessageCache();
 
     if (!this.account) {
       throw new Error(
@@ -121,6 +124,9 @@ export class SignalCLI {
         .filter((msg: SignalMessage) => msg?.envelope)
         .map((msg: SignalMessage) => this.parseMessage(msg))
         .filter((msg): msg is MessageResult => msg !== null);
+
+      // Store messages in cache
+      this.messageCache.storeMessages(parsedMessages);
 
       // Apply since filter if provided
       if (since) {
@@ -262,6 +268,19 @@ export class SignalCLI {
   }
 
   /**
+   * Get recent chats sorted by last message (uses message cache)
+   */
+  getRecentChats(limit: number = 20): RecentChat[] {
+    try {
+      return this.messageCache.getRecentChats(limit);
+    } catch (error) {
+      throw new Error(
+        `Failed to get recent chats: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+
+  /**
    * Check if a string is likely a Signal group ID (base64 encoded)
    */
   private isGroupId(recipient: string): boolean {
@@ -309,17 +328,23 @@ export class SignalCLI {
   }
 
   /**
-   * Search messages (simple text search through received messages)
-   * Note: signal-cli doesn't have built-in search, so this is a basic implementation
+   * Search messages (uses message cache for better performance)
    */
   async searchMessages(
     query: string,
     contact?: string,
-    searchLimit: number = 500,
+    searchLimit: number = 100,
   ): Promise<MessageResult[]> {
     try {
-      // Receive recent messages with configurable limit
-      const messages = await this.receiveMessages(searchLimit);
+      // Try cache first
+      const cachedResults = this.messageCache.searchMessages(query, contact, searchLimit);
+      
+      if (cachedResults.length > 0) {
+        return cachedResults;
+      }
+
+      // Fallback to receiving new messages if cache is empty
+      const messages = await this.receiveMessages(500);
       
       const lowerQuery = query.toLowerCase();
       
@@ -339,7 +364,7 @@ export class SignalCLI {
         });
       }
 
-      return filtered;
+      return filtered.slice(0, searchLimit);
     } catch (error) {
       throw new Error(
         `Failed to search messages: ${error instanceof Error ? error.message : error}`,
