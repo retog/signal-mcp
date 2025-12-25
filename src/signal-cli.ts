@@ -335,41 +335,11 @@ export class SignalCLI {
     contact?: string,
     searchLimit: number = 100,
   ): Promise<MessageResult[]> {
-    try {
-      // Try cache first
-      const cachedResults = this.messageCache.searchMessages(query, contact, searchLimit);
-      
-      if (cachedResults.length > 0) {
-        return cachedResults;
-      }
-
-      // Fallback to receiving new messages if cache is empty
-      const messages = await this.receiveMessages(500);
-      
-      const lowerQuery = query.toLowerCase();
-      
-      let filtered = messages.filter((msg) => {
-        const bodyMatch = msg.body?.toLowerCase().includes(lowerQuery);
-        const senderMatch = msg.sender?.toLowerCase().includes(lowerQuery);
-        const nameMatch = msg.senderName?.toLowerCase().includes(lowerQuery);
-        return bodyMatch || senderMatch || nameMatch;
-      });
-
-      // Filter by contact if provided
-      if (contact) {
-        const lowerContact = contact.toLowerCase();
-        filtered = filtered.filter((msg) => {
-          return msg.sender?.toLowerCase().includes(lowerContact) ||
-                 msg.senderName?.toLowerCase().includes(lowerContact);
-        });
-      }
-
-      return filtered.slice(0, searchLimit);
-    } catch (error) {
-      throw new Error(
-        `Failed to search messages: ${error instanceof Error ? error.message : error}`,
-      );
-    }
+    // Always receive new messages first to update cache
+    await this.receiveMessages(500);
+    
+    // Then search the cache
+    return this.messageCache.searchMessages(query, contact, searchLimit);
   }
 
   /**
