@@ -82,6 +82,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "get_recent_chats",
+        description:
+          "Get recent chats sorted by last message time. Returns an array of chats with last message info and timestamps. This is the PREFERRED tool for viewing active conversations.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Maximum number of chats to return (default: 20)",
+              minimum: 1,
+              maximum: 100,
+            },
+          },
+        },
+      },
+      {
         name: "search_messages",
         description:
           "Search through Signal message history. Returns matching messages with context.",
@@ -176,6 +192,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify(chats, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "get_recent_chats": {
+        const limit = (args?.limit as number) || 20;
+        const recentChats = signalCli.getRecentChats(limit);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(recentChats, null, 2),
             },
           ],
         };
