@@ -234,6 +234,57 @@ After adding the connector, start a new conversation and ask Claude:
 
 Claude should be able to access your Signal messages through the MCP server.
 
+## Connecting to VS Code with GitHub Copilot
+
+VS Code with GitHub Copilot supports MCP servers in Agent Mode. Unlike Claude.ai, VS Code doesn't accept credentials in the URL. Instead, you configure an `Authorization` header.
+
+### 1. Generate the Authorization Header
+
+Basic Auth requires Base64-encoded credentials. Generate the header value:
+
+```bash
+echo -n "username:password" | base64
+```
+
+Example:
+```bash
+echo -n "reto:mysecretpassword" | base64
+# Output: cmV0bzpteXNlY3JldHBhc3N3b3Jk
+```
+
+### 2. Configure VS Code
+
+Create or edit `.vscode/mcp.json` in your workspace (or add to your user `settings.json`):
+
+```json
+{
+  "servers": {
+    "signal": {
+      "type": "http",
+      "url": "https://signal.example.com/sse",
+      "headers": {
+        "Authorization": "Basic cmV0bzpteXNlY3JldHBhc3N3b3Jk"
+      }
+    }
+  }
+}
+```
+
+Replace the Base64 string with the output from step 1.
+
+### 3. Start the Server
+
+1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run `MCP: List Servers`
+3. Click "Start" next to the Signal server
+
+### 4. Use in Agent Mode
+
+1. Open GitHub Copilot Chat
+2. Switch to "Agent" mode (dropdown at bottom of chat)
+3. Click the Tools icon to verify Signal tools are available
+4. Ask: "Show me my recent Signal messages"
+
 ## Tools Reference
 
 For detailed documentation of all available tools (receive_messages, send_message, search_messages, etc.), see [TOOLS.md](TOOLS.md).
