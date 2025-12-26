@@ -352,6 +352,7 @@ deno task dev
 - **signal-cli Security**: Follow signal-cli security best practices for account management
 - **Network Security**: The HTTP server binds to 0.0.0.0 by default - use firewall rules or change HOST to localhost for local-only access
 - **CORS**: The server includes CORS headers for cross-origin requests - adjust as needed for production
+- **Production Deployment**: For production use with HTTPS and authentication, see [PRODUCTION.md](PRODUCTION.md)
 
 ## License
 
