@@ -1,358 +1,291 @@
 # Signal MCP Server
 
-An unofficial [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for the [Signal](https://signal.org) messenger, enabling Claude and other MCP clients to interact with Signal through [signal-cli](https://github.com/AsamK/signal-cli).
+An unofficial [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server for [Signal](https://signal.org) messenger, enabling Claude and other MCP clients to interact with Signal through [signal-cli](https://github.com/AsamK/signal-cli).
 
 ## Features
 
-- **Read Operations**:
-  - 📨 Receive and read Signal messages
-  - 💬 List all conversations (contacts and groups)
-  - 🔍 Search message history
-  - 📎 Download media attachments
+- 📨 Receive and read Signal messages
+- 💬 List all conversations (contacts and groups)
+- 🔍 Search message history
+- 📎 Download media attachments
+- ✉️ Send messages (requires user approval)
 
-- **Write Operations**:
-  - ✉️ Send Signal messages (each send requires user approval in Claude)
+## Local Development
 
-## Prerequisites
+### Prerequisites
 
-1. **Deno Runtime**: Install from [deno.land](https://deno.land/)
-   ```bash
-   curl -fsSL https://deno.land/install.sh | sh
-   ```
-
-2. **signal-cli**: Install and configure signal-cli
-   ```bash
-   # macOS (using Homebrew)
-   brew install signal-cli
-
-   # Linux
-   # Download from https://github.com/AsamK/signal-cli/releases
-   wget https://github.com/AsamK/signal-cli/releases/download/v0.13.9/signal-cli-0.13.9-Linux.tar.gz
-   tar xf signal-cli-0.13.9-Linux.tar.gz -C /opt
-   ln -sf /opt/signal-cli-0.13.9/bin/signal-cli /usr/local/bin/
-   ```
-
-3. **Register Signal Account**: Link your Signal account with signal-cli
-   ```bash
-   # Register a new number
-   signal-cli -a +YOUR_PHONE_NUMBER register
-
-   # Verify with the code you receive
-   signal-cli -a +YOUR_PHONE_NUMBER verify CODE
-
-   # OR link to an existing Signal account (recommended)
-   signal-cli -a +YOUR_PHONE_NUMBER link -n "signal-mcp"
-   # Scan the QR code with your Signal app: Settings > Linked Devices > Link New Device
-   ```
-
-## Installation
-
-Clone this repository:
+Install Deno and signal-cli:
 
 ```bash
-git clone https://github.com/retog/signal-mcp.git
-cd signal-mcp
+# Deno
+curl -fsSL https://deno.land/install.sh | sh
+
+# signal-cli (macOS)
+brew install signal-cli
+
+# signal-cli (Linux)
+wget https://github.com/AsamK/signal-cli/releases/download/v0.13.9/signal-cli-0.13.9-Linux.tar.gz
+tar xf signal-cli-0.13.9-Linux.tar.gz -C /opt
+sudo ln -sf /opt/signal-cli-0.13.9/bin/signal-cli /usr/local/bin/
 ```
 
-## Configuration
-
-Set up the required environment variable:
-
-```bash
-export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
-```
-
-Optional environment variables:
-
-```bash
-# Path to signal-cli binary (defaults to "signal-cli" in PATH)
-export SIGNAL_CLI_PATH="/opt/signal-cli/bin/signal-cli"
-
-# Timeout for signal-cli commands in milliseconds (default: 30000)
-export SIGNAL_TIMEOUT="30000"
-
-# HTTP server port (default: 3000)
-export PORT="3000"
-
-# HTTP server host (default: 0.0.0.0)
-export HOST="0.0.0.0"
-```
-
-## Usage
-
-### Running the HTTP Server
-
-Start the server:
-
-```bash
-# Using default port 3000
-deno task start
-
-# Or specify a custom port
-PORT=8080 SIGNAL_ACCOUNT="+1234567890" deno task start
-```
-
-The server will start on `http://0.0.0.0:3000` (or your specified port) and provide the following endpoints:
-
-- **GET /sse** - Server-Sent Events endpoint for MCP streaming communication
-- **POST /message?sessionId=<id>** - Message endpoint for client requests
-- **GET /health** - Health check endpoint
-
-### Connecting MCP Clients
-
-MCP clients should connect to the `/sse` endpoint using HTTP streaming. The server will:
-1. Establish an SSE connection on GET /sse
-2. Send an `endpoint` event with the message POST URL including session ID
-3. Accept JSON-RPC messages via POST /message with the session ID parameter
-
-### Claude Desktop Configuration (HTTP)
-
-For HTTP-based MCP connection, you'll need to run the server separately and configure Claude to connect to it.
-
-**Step 1: Start the Signal MCP server**
-
-```bash
-export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
-cd /path/to/signal-mcp
-deno task start
-```
-
-**Step 2: Configure Claude Desktop to use HTTP transport**
-
-Note: As of December 2024, Claude Desktop primarily supports stdio-based MCP servers. For HTTP/SSE transport, you may need to use a different MCP client or wait for Claude Desktop to add HTTP transport support.
-
-Alternative approach - Use stdio transport (legacy):
-
-If you prefer stdio transport for Claude Desktop compatibility, you can use an older version or contribute to adding HTTP support to Claude Desktop.
-
-For other MCP clients that support HTTP/SSE transport:
-
-```json
-{
-  "mcpServers": {
-    "signal": {
-      "url": "http://localhost:3000/sse",
-      "transport": "sse"
-    }
-  }
-}
-```
-
-## Usage
-
-### Running Standalone (HTTP Server)
-
-Start the Signal MCP server:
-
-```bash
-export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
-deno task start
-```
-
-The server will be accessible at `http://localhost:3000`. You can test it:
-
-```bash
-# Health check
-curl http://localhost:3000/health
-```
-
-### Available Tools
-
-#### 1. `receive_messages`
-
-Receive new messages from Signal.
-
-**Parameters:**
-- `limit` (optional): Maximum number of messages to return
-- `since` (optional): Unix timestamp - only return messages after this time
-
-**Example:**
-```typescript
-{
-  "limit": 10,
-  "since": 1703001600000
-}
-```
-
-**Returns:**
-```json
-[
-  {
-    "sender": "+1234567890",
-    "senderName": "John Doe",
-    "timestamp": 1703088000000,
-    "body": "Hello from Signal!",
-    "attachments": [],
-    "isGroup": false
-  }
-]
-```
-
-#### 2. `list_chats`
-
-List all Signal conversations (contacts and groups).
-
-**Parameters:** None
-
-**Returns:**
-```json
-[
-  {
-    "contact": "+1234567890",
-    "contactName": "John Doe",
-    "isGroup": false
-  },
-  {
-    "contact": "base64-encoded-group-id==",
-    "contactName": "My Group Chat",
-    "isGroup": true,
-    "groupName": "My Group Chat"
-  }
-]
-```
-
-#### 3. `search_messages`
-
-Search through Signal message history.
-
-**Parameters:**
-- `query` (required): Search query to find in messages
-- `contact` (optional): Filter results to messages from this contact
-
-**Example:**
-```typescript
-{
-  "query": "meeting",
-  "contact": "+1234567890"
-}
-```
-
-**Returns:**
-```json
-[
-  {
-    "sender": "+1234567890",
-    "senderName": "John Doe",
-    "timestamp": 1703088000000,
-    "body": "Let's schedule a meeting for tomorrow",
-    "attachments": [],
-    "isGroup": false
-  }
-]
-```
-
-#### 4. `download_media`
-
-Download media attachments from Signal messages.
-
-**Parameters:**
-- `messageId` (required): ID of the message containing the attachment
-- `attachmentId` (required): ID of the attachment to download
-
-**Example:**
-```typescript
-{
-  "messageId": "msg123",
-  "attachmentId": "att456"
-}
-```
-
-**Returns:**
-```json
-{
-  "path": "/path/to/downloaded/file"
-}
-```
-
-#### 5. `send_message`
-
-Send a message via Signal. **Requires individual approval in Claude for each send.**
-
-**Parameters:**
-- `recipient` (required): Phone number with country code (e.g., `+1234567890`) or group ID
-- `message` (required): Message text to send
-
-**Example:**
-```typescript
-{
-  "recipient": "+1234567890",
-  "message": "Hello from Signal MCP!"
-}
-```
-
-**Returns:**
-```json
-{
-  "success": true,
-  "timestamp": 1703088000000,
-  "messageId": "..."
-}
-```
-
-## How It Works
-
-1. **MCP Protocol**: The server implements the Model Context Protocol, allowing MCP clients to discover and use the Signal tools.
-
-2. **signal-cli Integration**: All Signal operations are performed using signal-cli with JSON output (`--output=json`), ensuring structured, parseable responses.
-
-3. **HTTP Streaming Transport**: Uses HTTP with Server-Sent Events (SSE) for real-time bidirectional communication between MCP clients and the server.
-   - Clients connect to `/sse` endpoint via HTTP GET
-   - Server streams events using SSE protocol  
-   - Clients send messages via HTTP POST to `/message` endpoint
-   - Each connection gets a unique session ID for routing
-
-4. **Security**: 
-   - Read operations (receive, list, search) are marked for auto-approval
-   - Write operations (send_message) require individual user approval for each execution
-   - All credentials are managed via environment variables
-
-## Troubleshooting
-
-### signal-cli not found
-
-Make sure signal-cli is in your PATH or set `SIGNAL_CLI_PATH` environment variable:
-
-```bash
-export SIGNAL_CLI_PATH="/opt/signal-cli/bin/signal-cli"
-```
-
-### Account not registered
-
-Ensure you've registered or linked your Signal account with signal-cli:
+### Link Signal Account
 
 ```bash
 signal-cli -a +YOUR_PHONE_NUMBER link -n "signal-mcp"
 ```
 
-### Permission errors
+Scan the QR code with Signal app: Settings → Linked Devices → Link New Device
 
-The Deno process needs `--allow-all` permissions to:
-- Execute signal-cli binary
-- Read environment variables
-- Start HTTP server and accept network connections
+### Run the Server
+
+```bash
+git clone https://github.com/retog/signal-mcp.git
+cd signal-mcp
+
+export SIGNAL_ACCOUNT="+YOUR_PHONE_NUMBER"
+deno task start
+```
+
+The server runs on `http://localhost:3000`. Test it:
+
+```bash
+curl http://localhost:3000/health
+```
+
+### Configuration
+
+Environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SIGNAL_ACCOUNT` | (required) | Your phone number with country code |
+| `SIGNAL_CLI_PATH` | `signal-cli` | Path to signal-cli binary |
+| `SIGNAL_TIMEOUT` | `30000` | Timeout in milliseconds |
+| `PORT` | `3000` | HTTP server port |
+| `HOST` | `0.0.0.0` | HTTP server host |
+
+
+## Production Deployment
+
+For production use, you need HTTPS and authentication. This section covers deploying on a Linux server with nginx.
+
+### 1. Install Dependencies
+
+```bash
+apt update
+apt install nginx certbot apache2-utils
+```
+
+### 2. Configure systemd Service
+
+Create `/etc/systemd/system/signal-mcp.service`:
+
+```ini
+[Unit]
+Description=Signal MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/home/youruser/signal-mcp
+Environment=SIGNAL_ACCOUNT=+1234567890
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+ExecStart=/home/youruser/.deno/bin/deno task start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+systemctl daemon-reload
+systemctl enable signal-mcp
+systemctl start signal-mcp
+```
+
+### 3. Configure DNS
+
+Create an A record pointing your subdomain to your server's IP:
+
+```
+signal.example.com → YOUR_SERVER_IP
+```
+
+### 4. Create SSL Certificate
+
+```bash
+mkdir -p /var/www/html/.well-known/acme-challenge
+certbot certonly --webroot -w /var/www/html -d signal.example.com
+```
+
+Certbot automatically renews certificates via systemd timer.
+
+### 5. Set Up Authentication
+
+```bash
+htpasswd -c /etc/nginx/.htpasswd yourusername
+```
+
+
+### 6. Configure nginx
+
+Create `/etc/nginx/sites-available/signal-mcp`:
+
+```nginx
+server {
+    listen 80;
+    server_name signal.example.com;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name signal.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/signal.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/signal.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location /sse {
+        auth_basic "Signal MCP";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        
+        proxy_pass http://127.0.0.1:3000/sse;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400;
+        chunked_transfer_encoding off;
+        
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+        
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+
+    location /message {
+        auth_basic "Signal MCP";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        
+        proxy_pass http://127.0.0.1:3000/message;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection '';
+        
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+        
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+}
+```
+
+Enable and reload:
+
+```bash
+ln -s /etc/nginx/sites-available/signal-mcp /etc/nginx/sites-enabled/
+nginx -t
+systemctl reload nginx
+```
+
+
+## Connecting to Claude.ai
+
+Once your server is running with HTTPS, register it in Claude.ai:
+
+1. Go to [claude.ai/settings/connectors](https://claude.ai/settings/connectors)
+2. Click "Add Connector"
+3. Enter the URL with credentials:
+
+```
+https://username:password@signal.example.com/sse
+```
+
+The URL uses standard HTTP Basic Auth format:
+- `username` - the username from htpasswd
+- `password` - your password (URL-encode special characters, e.g., `@` → `%40`)
+
+### Verify Connection
+
+After adding the connector, start a new conversation and ask Claude:
+
+> "Show me my recent Signal messages"
+
+Claude should be able to access your Signal messages through the MCP server.
+
+## Tools Reference
+
+For detailed documentation of all available tools (receive_messages, send_message, search_messages, etc.), see [TOOLS.md](TOOLS.md).
+
+## Troubleshooting
+
+### signal-cli not found
+
+```bash
+export SIGNAL_CLI_PATH="/opt/signal-cli-0.13.9/bin/signal-cli"
+```
+
+### 502 Bad Gateway
+
+Check if the service is running:
+
+```bash
+systemctl status signal-mcp
+ss -tlnp | grep 3000
+```
+
+### SSL errors
+
+Renew certificate:
+
+```bash
+certbot renew
+```
 
 ### No messages received
 
-- Check that signal-cli can receive messages: `signal-cli -a +YOUR_PHONE_NUMBER receive`
-- Ensure your Signal account is active and properly linked
-- Try increasing the timeout: `export SIGNAL_TIMEOUT="60000"`
+Test signal-cli directly:
+
+```bash
+signal-cli -a +YOUR_PHONE_NUMBER receive
+```
+
+
+## Security
+
+- Store credentials in environment variables, never in code
+- Message sends require explicit user approval in Claude
+- Use `HOST=127.0.0.1` to bind locally when behind a proxy
+- Use strong passwords for Basic Auth
 
 ## Development
 
-Run in development mode with auto-reload:
+Run with auto-reload:
 
 ```bash
 deno task dev
 ```
-
-## Security Considerations
-
-- **Environment Variables**: Store sensitive data (phone numbers) in environment variables, never in code
-- **Approval Required**: All message sends require explicit user approval in MCP clients
-- **signal-cli Security**: Follow signal-cli security best practices for account management
-- **Network Security**: The HTTP server binds to 0.0.0.0 by default - use firewall rules or change HOST to localhost for local-only access
-- **CORS**: The server includes CORS headers for cross-origin requests - adjust as needed for production
-- **Production Deployment**: For production use with HTTPS and authentication, see [PRODUCTION.md](PRODUCTION.md)
 
 ## License
 
@@ -363,10 +296,6 @@ MIT
 - [signal-cli](https://github.com/AsamK/signal-cli) - Command-line interface for Signal
 - [MCP SDK](https://github.com/modelcontextprotocol/sdk) - Model Context Protocol SDK
 - [Signal Messenger](https://signal.org) - Private messaging platform
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Disclaimer
 
