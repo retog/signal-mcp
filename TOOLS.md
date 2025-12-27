@@ -6,7 +6,7 @@ This document describes all available tools provided by the Signal MCP Server.
 
 | Tool | Description | Approval |
 |------|-------------|----------|
-| `receive_messages` | Receive new messages | Auto |
+| `get_messages` | Get recent messages | Auto |
 | `list_chats` | List conversations | Auto |
 | `search_messages` | Search message history | Auto |
 | `download_media` | Download attachments | Auto |
@@ -15,19 +15,19 @@ This document describes all available tools provided by the Signal MCP Server.
 
 ## Tools
 
-### receive_messages
+### get_messages
 
-Receive new messages from Signal.
+Get recent Signal messages. This is the recommended way to read messages. It fetches new messages from Signal first, then returns the most recent messages from cache.
 
 **Parameters:**
-- `limit` (optional): Maximum number of messages to return
-- `since` (optional): Unix timestamp - only return messages after this time
+- `limit` (optional): Maximum number of messages to return (default: 50, max: 500)
+- `contact` (optional): Filter to messages from this contact (phone number or name)
 
 **Example:**
 ```json
 {
-  "limit": 10,
-  "since": 1703001600000
+  "limit": 20,
+  "contact": "+1234567890"
 }
 ```
 
@@ -39,7 +39,6 @@ Receive new messages from Signal.
     "senderName": "John Doe",
     "timestamp": 1703088000000,
     "body": "Hello from Signal!",
-    "attachments": [],
     "isGroup": false
   }
 ]

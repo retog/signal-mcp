@@ -46,28 +46,28 @@ const server = new Server(
 );
 
 /**
- * Tool: receive_messages
- * Get new messages from Signal
+ * Tool: get_messages
+ * Get recent messages from Signal
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "receive_messages",
+        name: "get_messages",
         description:
-          "Receive new messages from Signal. Returns an array of message objects with sender, timestamp, body, and attachments.",
+          "Get recent Signal messages. Fetches new messages from Signal first, then returns the most recent messages from cache. This is the recommended way to read messages.",
         inputSchema: {
           type: "object",
           properties: {
             limit: {
               type: "number",
-              description: "Maximum number of messages to return (optional)",
+              description: "Maximum number of messages to return (default: 50)",
               minimum: 1,
+              maximum: 500,
             },
-            since: {
-              type: "number",
-              description:
-                "Unix timestamp - only return messages after this time (optional)",
+            contact: {
+              type: "string",
+              description: "Optional: filter to messages from this contact (phone number or name)",
             },
           },
         },
@@ -168,11 +168,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case "receive_messages": {
-        const limit = args?.limit as number | undefined;
-        const since = args?.since as number | undefined;
+      case "get_messages": {
+        const limit = (args?.limit as number) || 50;
+        const contact = args?.contact as string | undefined;
 
-        const messages = await signalCli.receiveMessages(limit, since);
+        const messages = await signalCli.getMessages(limit, contact);
 
         return {
           content: [

@@ -287,7 +287,7 @@ Replace the Base64 string with the output from step 1.
 
 ## Tools Reference
 
-For detailed documentation of all available tools (receive_messages, send_message, search_messages, etc.), see [TOOLS.md](TOOLS.md).
+For detailed documentation of all available tools (send_message, search_messages, etc.), see [TOOLS.md](TOOLS.md).
 
 ## Troubleshooting
 

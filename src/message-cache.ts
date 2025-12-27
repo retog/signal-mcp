@@ -213,6 +213,40 @@ export class MessageCache {
   }
 
   /**
+   * Get the most recent messages (no search, just latest)
+   */
+  getRecentMessages(limit: number = 50, contact?: string): MessageResult[] {
+    try {
+      let filtered = [...this.messages];
+      
+      // Filter by contact if specified
+      if (contact) {
+        const contactLower = contact.toLowerCase();
+        filtered = filtered.filter(msg => 
+          msg.sender?.toLowerCase().includes(contactLower) ||
+          msg.senderName?.toLowerCase().includes(contactLower)
+        );
+      }
+
+      // Sort by timestamp (newest first)
+      filtered.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Convert to MessageResult format
+      return filtered.slice(0, limit).map(msg => ({
+        sender: msg.sender,
+        senderName: msg.senderName,
+        timestamp: msg.timestamp,
+        body: msg.body,
+        isGroup: msg.isGroup,
+        groupId: msg.groupId,
+      }));
+    } catch (error) {
+      console.error("Failed to get recent messages:", error);
+      return [];
+    }
+  }
+
+  /**
    * Clean up old messages (keep last 30 days by default)
    */
   cleanup(daysToKeep: number = 30): void {

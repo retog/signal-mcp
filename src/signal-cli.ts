@@ -328,6 +328,17 @@ export class SignalCLI {
   }
 
   /**
+   * Get recent messages - fetches new messages first, then returns from cache
+   */
+  async getMessages(limit: number = 50, contact?: string): Promise<MessageResult[]> {
+    // First receive any new messages to update cache
+    await this.receiveMessages(500);
+    
+    // Then return recent messages from cache
+    return this.messageCache.getRecentMessages(limit, contact);
+  }
+
+  /**
    * Search messages (uses message cache for better performance)
    */
   async searchMessages(
