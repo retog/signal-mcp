@@ -304,19 +304,31 @@ export class SignalCLI {
   ): Promise<SendMessageResult> {
     try {
       const args = ["send", "-m", message];
+      const isGroup = this.isGroupId(recipient);
       
       // Check if recipient is a group ID (base64 encoded)
-      if (this.isGroupId(recipient)) {
+      if (isGroup) {
         args.push("-g", recipient);
       } else {
         args.push(recipient);
       }
 
       const result = await this.execute(args);
+      const timestamp = Date.now();
+      
+      // Store sent message in cache
+      this.messageCache.storeMessage({
+        sender: this.account,
+        senderName: "Me",
+        timestamp,
+        body: message,
+        isGroup,
+        groupId: isGroup ? recipient : undefined,
+      });
       
       return {
         success: true,
-        timestamp: Date.now(),
+        timestamp,
         messageId: JSON.stringify(result),
       };
     } catch (error) {
