@@ -8,7 +8,7 @@ An unofficial [Model Context Protocol (MCP)](https://modelcontextprotocol.io) se
 - 💬 List all conversations (contacts and groups)
 - 🔍 Search message history
 - 📎 Download media attachments
-- ✉️ Send messages (requires user approval)
+- ✉️ Send messages
 
 ## Local Development
 
