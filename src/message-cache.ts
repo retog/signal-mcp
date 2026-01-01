@@ -18,6 +18,7 @@ export interface RecentChat {
 interface CachedMessage {
   sender: string;
   senderName?: string;
+  recipient?: string; // Add recipient field for direct messages
   timestamp: number;
   body?: string;
   isGroup: boolean;
@@ -62,9 +63,9 @@ export class MessageCache {
   }
 
   /**
-   * Store a received message
+   * Store a received or sent message
    */
-  storeMessage(message: MessageResult): void {
+  storeMessage(message: MessageResult, recipient?: string): void {
     try {
       // Check if message already exists (by timestamp and sender)
       const exists = this.messages.some(
@@ -76,6 +77,7 @@ export class MessageCache {
       this.messages.push({
         sender: message.sender || "unknown",
         senderName: message.senderName,
+        recipient: recipient, // Store recipient for sent messages
         timestamp: message.timestamp,
         body: message.body,
         isGroup: message.isGroup || false,
@@ -98,42 +100,61 @@ export class MessageCache {
   /**
    * Store multiple messages
    */
-  storeMessages(messages: MessageResult[]): void {
+  storeMessages(messages: MessageResult[], recipient?: string): void {
     for (const message of messages) {
-      this.storeMessage(message);
+      this.storeMessage(message, recipient);
     }
   }
 
   /**
    * Get recent chats sorted by last message timestamp
+   * Groups messages by conversation (bidirectional)
    */
   getRecentChats(limit: number = 20): RecentChat[] {
     try {
-      // Group messages by sender
+      // Group messages by conversation partner
       const chatMap = new Map<string, CachedMessage[]>();
       
       for (const msg of this.messages) {
-        if (!chatMap.has(msg.sender)) {
-          chatMap.set(msg.sender, []);
+        // Determine conversation partner
+        let conversationPartner: string;
+        if (msg.isGroup) {
+          conversationPartner = msg.groupId || msg.sender;
+        } else {
+          // For direct messages, the partner is either the sender (if incoming) or recipient (if outgoing)
+          conversationPartner = msg.recipient || msg.sender;
         }
-        chatMap.get(msg.sender)!.push(msg);
+        
+        if (!chatMap.has(conversationPartner)) {
+          chatMap.set(conversationPartner, []);
+        }
+        chatMap.get(conversationPartner)!.push(msg);
       }
 
       // Create chat summaries
       const chats: RecentChat[] = [];
       
-      for (const [sender, messages] of chatMap.entries()) {
+      for (const [partner, messages] of chatMap.entries()) {
         // Sort messages by timestamp (newest first)
         messages.sort((a, b) => b.timestamp - a.timestamp);
         const lastMessage = messages[0];
-        const unreadCount = messages.filter(m => !m.read).length;
+        
+        // Count unread messages (only incoming messages)
+        const unreadCount = messages.filter(m => !m.read && !m.recipient).length;
+
+        // For display name, prefer the contact name over phone number
+        let displayName = partner;
+        const incomingMessage = messages.find(m => !m.recipient);
+        if (incomingMessage?.senderName) {
+          displayName = incomingMessage.senderName;
+        }
 
         chats.push({
-          contact: sender,
-          contactName: lastMessage.senderName,
+          contact: partner,
+          contactName: displayName,
           lastMessageTimestamp: lastMessage.timestamp,
           isGroup: lastMessage.isGroup,
-          groupName: lastMessage.isGroup ? lastMessage.senderName : undefined,
+          groupName: lastMessage.isGroup ? displayName : undefined,
           lastMessageBody: lastMessage.body,
           unreadCount,
         });
@@ -171,6 +192,7 @@ export class MessageCache {
 
   /**
    * Search messages by content
+   * For a specific sender, searches both incoming and outgoing messages
    */
   searchMessages(query: string, sender?: string, limit: number = 50): MessageResult[] {
     try {
@@ -187,8 +209,12 @@ export class MessageCache {
         
         if (sender) {
           const senderLower = sender.toLowerCase();
-          return msg.sender?.toLowerCase().includes(senderLower) ||
-                 msg.senderName?.toLowerCase().includes(senderLower);
+          // Include both directions: messages from sender and messages to sender
+          const fromSender = msg.sender?.toLowerCase().includes(senderLower) ||
+                           msg.senderName?.toLowerCase().includes(senderLower);
+          const toSender = msg.recipient?.toLowerCase().includes(senderLower);
+          
+          return fromSender || toSender;
         }
         
         return true;
@@ -214,18 +240,25 @@ export class MessageCache {
 
   /**
    * Get the most recent messages (no search, just latest)
+   * For a contact, returns both incoming and outgoing messages
    */
   getRecentMessages(limit: number = 50, contact?: string): MessageResult[] {
     try {
       let filtered = [...this.messages];
       
-      // Filter by contact if specified
+      // Filter by contact if specified - include both directions
       if (contact) {
         const contactLower = contact.toLowerCase();
-        filtered = filtered.filter(msg => 
-          msg.sender?.toLowerCase().includes(contactLower) ||
-          msg.senderName?.toLowerCase().includes(contactLower)
-        );
+        filtered = filtered.filter(msg => {
+          // Incoming messages: sender matches contact
+          const fromContact = msg.sender?.toLowerCase().includes(contactLower) ||
+                              msg.senderName?.toLowerCase().includes(contactLower);
+          
+          // Outgoing messages: recipient matches contact  
+          const toContact = msg.recipient?.toLowerCase().includes(contactLower);
+          
+          return fromContact || toContact;
+        });
       }
 
       // Sort by timestamp (newest first)

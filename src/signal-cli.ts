@@ -316,7 +316,7 @@ export class SignalCLI {
       const result = await this.execute(args);
       const timestamp = Date.now();
       
-      // Store sent message in cache
+      // Store sent message in cache with recipient information
       this.messageCache.storeMessage({
         sender: this.account,
         senderName: "Me",
@@ -324,7 +324,7 @@ export class SignalCLI {
         body: message,
         isGroup,
         groupId: isGroup ? recipient : undefined,
-      });
+      }, isGroup ? undefined : recipient); // Pass recipient for direct messages
       
       return {
         success: true,
